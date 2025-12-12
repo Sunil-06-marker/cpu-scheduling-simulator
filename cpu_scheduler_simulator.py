@@ -400,3 +400,186 @@ class DashboardApp:
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=(6, 12))
 
 
+
+    # --------------------------------------------------------
+    # Treeview Utility
+    # --------------------------------------------------------
+
+    def _make_treeview(self, parent, columns, height, assign_to=None):
+        container = tk.Frame(parent, bg="#222")
+        style = ttk.Style()
+
+        style.theme_use("clam")
+        style.configure("Custom.Treeview",
+                        background="#2a2a2a",
+                        foreground="#e6e6e6",
+                        fieldbackground="#2a2a2a",
+                        rowheight=26)
+        style.configure("Custom.Treeview.Heading",
+                        background="#2a2a2a",
+                        foreground="#ffffff")
+
+        tree = ttk.Treeview(container, columns=columns,
+                            show="headings", height=height,
+                            style="Custom.Treeview")
+
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, anchor="center")
+
+        scrollbar = ttk.Scrollbar(container, orient="vertical",
+                                  command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        if assign_to == "proc_tree":
+            self.proc_tree = tree
+        elif assign_to == "metrics_tree":
+            self.metrics_tree = tree
+
+        return container
+
+    # --------------------------------------------------------
+    # Event Handlers
+    # --------------------------------------------------------
+
+    def _on_algo_change(self, choice):
+        if choice == "Round Robin":
+            self.entry_quantum.configure(state="normal")
+        else:
+            self.entry_quantum.configure(state="disabled")
+            self.entry_quantum.delete(0, tk.END)
+
+    def add_process(self):
+        pid = self.entry_pid.get().strip()
+        arr = self.entry_arr.get().strip()
+        burst = self.entry_burst.get().strip()
+        pr = self.entry_pr.get().strip()
+
+        if not pid or not arr or not burst:
+            messagebox.showwarning("Input Error", "PID, Arrival, and Burst are required.")
+            return
+
+        try:
+            arr_i = int(arr)
+            burst_i = int(burst)
+            pr_i = int(pr) if pr else 0
+
+            if arr_i < 0 or burst_i <= 0:
+                raise ValueError
+
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter valid numeric values.")
+            return
+
+        process = Process(pid, arr_i, burst_i, pr_i)
+        self.processes.append(process)
+
+        self.proc_tree.insert("", "end", values=(pid, arr_i, burst_i, pr_i))
+
+        self.entry_pid.delete(0, tk.END)
+        self.entry_arr.delete(0, tk.END)
+        self.entry_burst.delete(0, tk.END)
+        self.entry_pr.delete(0, tk.END)
+
+    def clear_processes(self):
+        self.processes = []
+        for item in self.proc_tree.get_children():
+            self.proc_tree.delete(item)
+        for item in self.metrics_tree.get_children():
+            self.metrics_tree.delete(item)
+
+        self.summary_label.configure(text="Summary:")
+        self._clear_gantt()
+
+    def reset_output(self):
+        for item in self.metrics_tree.get_children():
+            self.metrics_tree.delete(item)
+        self.summary_label.configure(text="Summary:")
+        self._clear_gantt()
+
+    def _clear_gantt(self):
+        self.ax.clear()
+        self.ax.set_facecolor("#1b1b1b")
+        self.canvas.draw()
+
+    def run_simulation(self):
+        algo = self.algo_opt.get()
+        quantum = None
+
+        if algo == "Round Robin":
+            qtxt = self.entry_quantum.get().strip()
+            if not qtxt:
+                messagebox.showerror("Missing Quantum", "Please enter a time quantum.")
+                return
+
+            try:
+                quantum = int(qtxt)
+                if quantum <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Invalid Quantum", "Quantum must be a positive integer.")
+                return
+
+        gantt, metrics, summary = run_scheduler(self.processes, algo, quantum)
+
+        for item in self.metrics_tree.get_children():
+            self.metrics_tree.delete(item)
+
+        for pid, m in metrics.items():
+            self.metrics_tree.insert("", "end",
+                                     values=(pid, m["CT"], m["TAT"], m["WT"], m["RT"]))
+
+        self.summary_label.configure(
+            text=f"Summary:  Avg WT={summary['avg_wt']:.2f} | "
+                 f"Avg TAT={summary['avg_tat']:.2f} | "
+                 f"Throughput={summary['throughput']:.3f} | "
+                 f"Total Time={summary['total_time']}"
+        )
+
+        self._draw_gantt(gantt)
+
+    def _draw_gantt(self, gantt):
+        self.ax.clear()
+        self.ax.set_facecolor("#1b1b1b")
+
+        # Assign colors to processes
+        pids = [b["pid"] for b in gantt if b["pid"] != "IDLE"]
+        unique = list(dict.fromkeys(pids))
+
+        palette = [
+            "#00b894", "#0984e3", "#6c5ce7", "#e84393",
+            "#fdcb6e", "#e17055", "#00cec9", "#e056fd"
+        ]
+
+        colors = {pid: palette[i % len(palette)] for i, pid in enumerate(unique)}
+
+        y = 0.6
+
+        for block in gantt:
+            pid = block["pid"]
+            start, end = block["start"], block["end"]
+            width = end - start
+            color = "#555" if pid == "IDLE" else colors.get(pid, "#999")
+
+            self.ax.barh(y, width, left=start, height=0.6,
+                         color=color, edgecolor="white", linewidth=0.6)
+
+            if width >= 0.6:
+                self.ax.text(start + width / 2, y, pid,
+                             ha="center", va="center",
+                             fontsize=9, color="#0b0b0b", weight="bold")
+
+        total = gantt[-1]["end"] if gantt else 1
+        xticks = list(range(0, int(math.ceil(total)) + 1))
+
+        self.ax.set_xticks(xticks)
+        self.ax.set_yticks([])
+        self.ax.tick_params(colors="#d0d0d0")
+
+        self.ax.xaxis.grid(True, color="#2b2b2b")
+
+        self.canvas.draw()
+
