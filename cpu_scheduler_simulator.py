@@ -41,3 +41,129 @@ class Process:
         self.arrival = arrival
         self.burst = burst
         self.priority = priority
+
+
+# ------------------------------------------------------------
+# Scheduling Algorithms
+# ------------------------------------------------------------
+
+def simulate_fcfs(processes):
+    """First Come First Serve (Non-preemptive)."""
+    processes = sorted(processes, key=lambda p: p.arrival)
+    gantt = []
+    time = 0
+
+    for p in processes:
+        if time < p.arrival:
+            gantt.append({"pid": "IDLE", "start": time, "end": p.arrival})
+            time = p.arrival
+
+        start = time
+        end = time + p.burst
+        gantt.append({"pid": p.pid, "start": start, "end": end})
+        time = end
+
+    return gantt
+
+
+def simulate_sjf_np(processes):
+    """Shortest Job First (Non-preemptive)."""
+    remaining = sorted(processes, key=lambda p: p.arrival)
+    gantt = []
+    time = 0
+
+    while remaining:
+        ready = [p for p in remaining if p.arrival <= time]
+
+        if not ready:
+            next_arrival = remaining[0].arrival
+            gantt.append({"pid": "IDLE", "start": time, "end": next_arrival})
+            time = next_arrival
+            continue
+
+        p = min(ready, key=lambda x: x.burst)
+        remaining.remove(p)
+
+        start = time
+        end = time + p.burst
+        gantt.append({"pid": p.pid, "start": start, "end": end})
+        time = end
+
+    return gantt
+
+
+def simulate_priority_np(processes):
+    """Non-preemptive Priority Scheduling."""
+    remaining = sorted(processes, key=lambda p: p.arrival)
+    gantt = []
+    time = 0
+
+    while remaining:
+        ready = [p for p in remaining if p.arrival <= time]
+
+        if not ready:
+            next_arrival = remaining[0].arrival
+            gantt.append({"pid": "IDLE", "start": time, "end": next_arrival})
+            time = next_arrival
+            continue
+
+        p = min(ready, key=lambda x: (x.priority, x.arrival))
+        remaining.remove(p)
+
+        start = time
+        end = time + p.burst
+        gantt.append({"pid": p.pid, "start": start, "end": end})
+        time = end
+
+    return gantt
+
+
+def simulate_rr(processes, quantum):
+    """Round Robin scheduling."""
+    if quantum <= 0:
+        raise ValueError("Quantum must be > 0")
+
+    processes = sorted(processes, key=lambda p: p.arrival)
+    gantt = []
+    time = 0
+
+    remaining = {p.pid: p.burst for p in processes}
+    first_start = {p.pid: None for p in processes}
+
+    ready = []
+    idx = 0
+
+    def add_arrivals(current_time):
+        nonlocal idx
+        while idx < len(processes) and processes[idx].arrival <= current_time:
+            ready.append(processes[idx])
+            idx += 1
+
+    add_arrivals(time)
+
+    while ready or idx < len(processes):
+        if not ready:
+            next_arrival = processes[idx].arrival
+            gantt.append({"pid": "IDLE", "start": time, "end": next_arrival})
+            time = next_arrival
+            add_arrivals(time)
+            continue
+
+        p = ready.pop(0)
+
+        if first_start[p.pid] is None:
+            first_start[p.pid] = time
+
+        run_time = min(quantum, remaining[p.pid])
+        start, end = time, time + run_time
+        gantt.append({"pid": p.pid, "start": start, "end": end})
+
+        time = end
+        remaining[p.pid] -= run_time
+
+        add_arrivals(time)
+
+        if remaining[p.pid] > 0:
+            ready.append(p)
+
+    return gantt
