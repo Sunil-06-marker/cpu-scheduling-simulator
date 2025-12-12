@@ -167,3 +167,70 @@ def simulate_rr(processes, quantum):
             ready.append(p)
 
     return gantt
+
+
+# ------------------------------------------------------------
+# Metrics Calculation
+# ------------------------------------------------------------
+
+def compute_metrics(processes, gantt):
+    """Returns individual process metrics and overall summary."""
+
+    pids = [p.pid for p in processes]
+    arrival = {p.pid: p.arrival for p in processes}
+    burst = {p.pid: p.burst for p in processes}
+
+    completion = {pid: 0 for pid in pids}
+    first_start = {pid: None for pid in pids}
+
+    for block in gantt:
+        pid = block["pid"]
+        if pid == "IDLE":
+            continue
+
+        start, end = block["start"], block["end"]
+        completion[pid] = max(completion[pid], end)
+
+        if first_start[pid] is None or start < first_start[pid]:
+            first_start[pid] = start
+
+    metrics = {}
+    total_wt = total_tat = 0
+
+    for pid in pids:
+        ct = completion[pid]
+        tat = ct - arrival[pid]
+        wt = tat - burst[pid]
+        rt = (first_start[pid] - arrival[pid]) if first_start[pid] is not None else 0
+
+        metrics[pid] = {"CT": ct, "TAT": tat, "WT": wt, "RT": rt}
+
+        total_wt += wt
+        total_tat += tat
+
+    total_time = gantt[-1]["end"] if gantt else 0
+    summary = {
+        "avg_wt": total_wt / len(pids),
+        "avg_tat": total_tat / len(pids),
+        "throughput": len(pids) / total_time if total_time else 0,
+        "total_time": total_time
+    }
+
+    return metrics, summary
+
+
+def run_scheduler(processes, algo, quantum=None):
+    """Main routing function for selecting algorithms."""
+    if algo == "FCFS":
+        gantt = simulate_fcfs(processes)
+    elif algo == "SJF":
+        gantt = simulate_sjf_np(processes)
+    elif algo == "Priority":
+        gantt = simulate_priority_np(processes)
+    elif algo == "Round Robin":
+        gantt = simulate_rr(processes, quantum)
+    else:
+        raise ValueError("Unknown scheduling algorithm.")
+
+    metrics, summary = compute_metrics(processes, gantt)
+    return gantt, metrics, summary
