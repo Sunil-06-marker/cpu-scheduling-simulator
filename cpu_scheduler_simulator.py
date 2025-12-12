@@ -235,6 +235,7 @@ def run_scheduler(processes, algo, quantum=None):
     metrics, summary = compute_metrics(processes, gantt)
     return gantt, metrics, summary
 
+
 # ------------------------------------------------------------
 # Dashboard UI (CustomTkinter)
 # ------------------------------------------------------------
@@ -398,8 +399,6 @@ class DashboardApp:
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=frame)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=(6, 12))
-
-
 
     # --------------------------------------------------------
     # Treeview Utility
@@ -582,7 +581,6 @@ class DashboardApp:
         self.ax.xaxis.grid(True, color="#2b2b2b")
 
         self.canvas.draw()
-
 
 
 # ------------------------------------------------------------
