@@ -583,3 +583,13 @@ class DashboardApp:
 
         self.canvas.draw()
 
+
+
+# ------------------------------------------------------------
+# Run the App
+# ------------------------------------------------------------
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    DashboardApp(root)
+    root.mainloop()
